@@ -26,20 +26,10 @@ const COLORS = {
 
 // ─── Seed Data ────────────────────────────────────────────────────────────────
 const INITIAL_USERS = [
-  { id: "admin", name: "Administrador", email: "admin@colegio.cl", password: "admin123", role: "admin" },
-  { id: "t1", name: "Prof. María González", email: "mgonzalez@colegio.cl", password: "prof123", role: "teacher", classes: ["1A", "2B"] },
-  { id: "t2", name: "Prof. Carlos Ramírez", email: "cramirez@colegio.cl", password: "prof123", role: "teacher", classes: ["3A"] },
+  { id: "admin", name: "Administrador", email: "admin@colegio.pe", password: "admin123", role: "admin" },
 ];
 
-const INITIAL_STUDENTS = [
-  { id: "s1", name: "Ana Martínez", rut: "12.345.678-9", course: "1A" },
-  { id: "s2", name: "Bruno Soto", rut: "13.456.789-0", course: "1A" },
-  { id: "s3", name: "Camila Torres", rut: "14.567.890-1", course: "1A" },
-  { id: "s4", name: "Diego Fuentes", rut: "15.678.901-2", course: "2B" },
-  { id: "s5", name: "Elena Castillo", rut: "16.789.012-3", course: "2B" },
-  { id: "s6", name: "Felipe Morales", rut: "17.890.123-4", course: "3A" },
-  { id: "s7", name: "Gabriela Núñez", rut: "18.901.234-5", course: "3A" },
-];
+const INITIAL_STUDENTS = [];
 
 const TODAY = new Date().toISOString().split("T")[0];
 
@@ -158,8 +148,7 @@ function Login({ users, onLogin }) {
         }}>Iniciar sesión</button>
 
         <p style={{ textAlign: "center", marginTop: 20, fontSize: 12, color: COLORS.gray400 }}>
-          Demo — Admin: admin@colegio.cl / admin123<br />
-          Docente: mgonzalez@colegio.cl / prof123
+          Admin: admin@colegio.pe / admin123
         </p>
       </div>
     </div>
@@ -1421,12 +1410,34 @@ const iconBtn = (bg, color) => ({
   display: "inline-flex", alignItems: "center", justifyContent: "center"
 });
 
+// ─── PERSISTENCIA localStorage ────────────────────────────────────────────────
+function loadData(key, fallback) {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? JSON.parse(raw) : fallback;
+  } catch { return fallback; }
+}
+function saveData(key, value) {
+  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
+}
+function usePersisted(key, initial) {
+  const [state, setState] = useState(() => loadData(key, initial));
+  function setPersisted(val) {
+    setState(prev => {
+      const next = typeof val === "function" ? val(prev) : val;
+      saveData(key, next);
+      return next;
+    });
+  }
+  return [state, setPersisted];
+}
+
 // ─── APP ROOT ─────────────────────────────────────────────────────────────────
 export default function App() {
-  const [users, setUsers] = useState(INITIAL_USERS);
-  const [students, setStudents] = useState(INITIAL_STUDENTS);
-  const [classrooms, setClassrooms] = useState(INITIAL_CLASSROOMS);
-  const [attendance, setAttendance] = useState(initAttendance(INITIAL_STUDENTS));
+  const [users, setUsers] = usePersisted("edu_users", INITIAL_USERS);
+  const [students, setStudents] = usePersisted("edu_students", INITIAL_STUDENTS);
+  const [classrooms, setClassrooms] = usePersisted("edu_classrooms", INITIAL_CLASSROOMS);
+  const [attendance, setAttendance] = usePersisted("edu_attendance", initAttendance(INITIAL_STUDENTS));
   const [currentUser, setCurrentUser] = useState(null);
   const [view, setView] = useState(null);
   const isMobile = useIsMobile();
