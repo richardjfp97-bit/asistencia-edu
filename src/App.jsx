@@ -760,9 +760,13 @@ function ReportsView({ user, students, attendance }) {
 }
 
 // ─── ADMIN: TEACHERS ──────────────────────────────────────────────────────────
-function TeachersView({ users, setUsers, students }) {
+function TeachersView({ users, setUsers, students, classrooms }) {
   const teachers = users.filter(u => u.role === "teacher");
-  const allCourses = [...new Set(students.map(s => s.course))];
+  // Combina aulas registradas + cursos de estudiantes para no perder ninguna
+  const allCourses = [...new Set([
+    ...classrooms.map(c => c.name),
+    ...students.map(s => s.course)
+  ])].sort();
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", password: "", classes: [] });
   const [editId, setEditId] = useState(null);
@@ -852,16 +856,38 @@ function TeachersView({ users, setUsers, students }) {
               </div>
             ))}
             <div style={{ marginBottom: 20 }}>
-              <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: COLORS.gray600, marginBottom: 8 }}>Cursos asignados</label>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {allCourses.map(c => (
-                  <button key={c} onClick={() => toggleCourse(c)} style={{
-                    padding: "6px 14px", borderRadius: 8, border: "none", cursor: "pointer", fontWeight: 600, fontSize: 13,
-                    background: form.classes.includes(c) ? COLORS.navy : COLORS.gray100,
-                    color: form.classes.includes(c) ? "#fff" : COLORS.gray600,
-                  }}>{c}</button>
-                ))}
-              </div>
+              <label style={{ display: "block", fontSize: 13, fontWeight: 600, color: COLORS.gray600, marginBottom: 4 }}>
+                Aulas asignadas
+                {form.classes.length > 0 && (
+                  <span style={{ marginLeft: 8, background: COLORS.sky, color: "#fff", borderRadius: 99, padding: "1px 8px", fontSize: 11, fontWeight: 700 }}>
+                    {form.classes.length} seleccionada(s)
+                  </span>
+                )}
+              </label>
+              <p style={{ margin: "0 0 8px", fontSize: 12, color: COLORS.gray400 }}>Toca las aulas para asignar o quitar acceso al docente</p>
+              {allCourses.length === 0 ? (
+                <div style={{ background: "#FFF7ED", border: `1px solid ${COLORS.amber}44`, borderRadius: 8, padding: "10px 14px", fontSize: 13, color: COLORS.amber }}>
+                  ⚠️ No hay aulas creadas. Ve a <strong>Aulas</strong> para crear una primero.
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  {allCourses.map(c => {
+                    const selected = form.classes.includes(c);
+                    return (
+                      <button key={c} onClick={() => toggleCourse(c)} style={{
+                        padding: "8px 16px", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: 13,
+                        border: `2px solid ${selected ? COLORS.navy : COLORS.gray200}`,
+                        background: selected ? COLORS.navy : COLORS.white,
+                        color: selected ? "#fff" : COLORS.gray600,
+                        transition: "all .15s",
+                        display: "flex", alignItems: "center", gap: 6
+                      }}>
+                        {selected ? "✓ " : ""}{c}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
             <div style={{ display: "flex", gap: 10 }}>
               <button onClick={save} style={{ flex: 1, padding: "11px", background: COLORS.navy, color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, cursor: "pointer" }}>
@@ -1432,7 +1458,7 @@ export default function App() {
     classrooms: <ClassroomsView classrooms={classrooms} setClassrooms={setClassrooms} students={students} users={users} />,
     attendance: <AttendanceView user={currentUser} students={students} attendance={attendance} setAttendance={setAttendance} />,
     reports: <ReportsView user={currentUser} students={students} attendance={attendance} />,
-    teachers: <TeachersView users={users} setUsers={setUsers} students={students} />,
+    teachers: <TeachersView users={users} setUsers={setUsers} students={students} classrooms={classrooms} />,
     students: <StudentsView students={students} setStudents={setStudents} />,
   };
 
