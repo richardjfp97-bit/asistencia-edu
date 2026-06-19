@@ -885,36 +885,74 @@ function StudentsView({ students, setStudents }) {
   const allCourses = ["Todos", ...new Set(students.map(s => s.course))];
   const [showModal, setShowModal] = useState(false);
   const [form, setForm] = useState({ name: "", rut: "", course: "" });
+  const [importStatus, setImportStatus] = useState(null); // null | "loading" | "ok" | "error"
+  const [importMsg, setImportMsg] = useState("");
 
   function importExcel(e) {
     const file = e.target.files[0];
     if (!file) return;
+    setImportStatus("loading");
+    setImportMsg("Leyendo archivo...");
+
     const reader = new FileReader();
-    reader.onload = ev => {
-      const wb = XLSX.read(ev.target.result, { type: "binary" });
-      const ws = wb.Sheets[wb.SheetNames[0]];
-      const rows = XLSX.utils.sheet_to_json(ws);
-      const newStudents = rows
-        .filter(r => r["Nombre"] && r["RUT/ID"] && r["Curso"])
-        .map((r, i) => ({
-          id: `imp_${Date.now()}_${i}`,
-          name: String(r["Nombre"]),
-          rut: String(r["RUT/ID"]),
-          course: String(r["Curso"]),
-        }));
-      setStudents(prev => {
-        const existing = new Set(prev.map(s => s.rut));
-        return [...prev, ...newStudents.filter(s => !existing.has(s.rut))];
-      });
+    reader.onerror = () => {
+      setImportStatus("error");
+      setImportMsg("No se pudo leer el archivo. Intenta de nuevo.");
     };
-    reader.readAsBinaryString(file);
-    e.target.value = "";
+    reader.onload = ev => {
+      try {
+        const data = new Uint8Array(ev.target.result);
+        const wb = XLSX.read(data, { type: "array" });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
+
+        // Flexible column matching (handles spaces and case variations)
+        const normalize = s => String(s).trim().toLowerCase();
+        const findKey = (row, candidates) =>
+          Object.keys(row).find(k => candidates.includes(normalize(k)));
+
+        const newStudents = rows
+          .map((r, i) => {
+            const kName = findKey(r, ["nombre", "name", "alumno", "estudiante"]);
+            const kRut  = findKey(r, ["rut/id", "rut", "id", "dni", "codigo"]);
+            const kCourse = findKey(r, ["curso", "aula", "grado", "clase", "section"]);
+            if (!kName || !kRut || !kCourse) return null;
+            const name = String(r[kName]).trim();
+            const rut  = String(r[kRut]).trim();
+            const course = String(r[kCourse]).trim();
+            if (!name || !rut || !course) return null;
+            return { id: `imp_${Date.now()}_${i}`, name, rut, course };
+          })
+          .filter(Boolean);
+
+        if (newStudents.length === 0) {
+          setImportStatus("error");
+          setImportMsg("No se encontraron estudiantes. Verifica que el archivo tenga columnas: Nombre, RUT/ID, Curso");
+          e.target.value = "";
+          return;
+        }
+
+        setStudents(prev => {
+          const existing = new Set(prev.map(s => s.rut));
+          const added = newStudents.filter(s => !existing.has(s.rut));
+          setImportStatus("ok");
+          setImportMsg(`✅ ${added.length} estudiante(s) importado(s) correctamente.${newStudents.length - added.length > 0 ? ` (${newStudents.length - added.length} ya existían)` : ""}`);
+          return [...prev, ...added];
+        });
+      } catch (err) {
+        setImportStatus("error");
+        setImportMsg("Error al procesar el archivo. Asegúrate de que sea un .xlsx válido.");
+      }
+      e.target.value = "";
+    };
+    reader.readAsArrayBuffer(file);
   }
 
   function downloadTemplate() {
     const ws = XLSX.utils.json_to_sheet([
       { Nombre: "Juan Pérez", "RUT/ID": "11.111.111-1", Curso: "1A" },
       { Nombre: "María López", "RUT/ID": "22.222.222-2", Curso: "2B" },
+      { Nombre: "Carlos Ruiz", "RUT/ID": "33.333.333-3", Curso: "3A" },
     ]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Estudiantes");
@@ -938,18 +976,37 @@ function StudentsView({ students, setStudents }) {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16, flexWrap: "wrap", gap: 10 }}>
         <h2 style={{ ...pageTitle, margin: 0 }}>Gestión de Estudiantes</h2>
-        <div style={{ display: "flex", gap: 10 }}>
-          <button onClick={downloadTemplate} style={{ ...actionBtn(COLORS.amber), fontSize: 13 }}>📄 Descargar Plantilla</button>
-          <button onClick={() => fileRef.current.click()} style={{ ...actionBtn(COLORS.sky), fontSize: 13 }}>📤 Importar Excel</button>
-          <button onClick={() => setShowModal(true)} style={{ padding: "10px 18px", background: COLORS.navy, color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button onClick={downloadTemplate} style={{ ...actionBtn(COLORS.amber), fontSize: 12 }}>📄 Plantilla</button>
+          <button onClick={() => fileRef.current.click()} style={{ ...actionBtn(COLORS.sky), fontSize: 12 }}>📤 Importar Excel</button>
+          <button onClick={() => setShowModal(true)} style={{ padding: "9px 16px", background: COLORS.navy, color: "#fff", border: "none", borderRadius: 10, fontWeight: 700, fontSize: 13, cursor: "pointer" }}>
             + Agregar
           </button>
         </div>
       </div>
 
-      <input ref={fileRef} type="file" accept=".xlsx,.xls" style={{ display: "none" }} onChange={importExcel} />
+      {/* Import status banner */}
+      {importStatus && (
+        <div style={{
+          padding: "12px 16px", borderRadius: 10, marginBottom: 16, fontSize: 13, fontWeight: 600,
+          background: importStatus === "ok" ? "#D1FAE5" : importStatus === "error" ? "#FFE4E6" : "#EFF6FF",
+          color: importStatus === "ok" ? COLORS.emerald : importStatus === "error" ? COLORS.rose : COLORS.sky,
+          border: `1px solid ${importStatus === "ok" ? COLORS.emerald : importStatus === "error" ? COLORS.rose : COLORS.sky}44`,
+          display: "flex", justifyContent: "space-between", alignItems: "center"
+        }}>
+          <span>{importStatus === "loading" ? "⏳ " : ""}{importMsg}</span>
+          <button onClick={() => setImportStatus(null)} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, color: "inherit" }}>✕</button>
+        </div>
+      )}
+
+      {/* Instrucciones de importación */}
+      <div style={{ background: "#EFF6FF", border: `1px solid ${COLORS.sky}44`, borderRadius: 10, padding: "10px 14px", marginBottom: 16, fontSize: 12, color: COLORS.navy }}>
+        💡 <strong>Para importar:</strong> El archivo Excel debe tener columnas <strong>Nombre</strong>, <strong>RUT/ID</strong> y <strong>Curso</strong>. Descarga la plantilla si no tienes una.
+      </div>
+
+      <input ref={fileRef} type="file" accept=".xlsx,.xls,.csv" style={{ display: "none" }} onChange={importExcel} />
 
       <div style={{ marginBottom: 16, display: "flex", gap: 8, flexWrap: "wrap" }}>
         {allCourses.map(c => (
